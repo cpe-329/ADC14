@@ -44,8 +44,8 @@ volatile uint8_t got_fresh_char;
 
 int main(void)
 {
-    volatile uint32_t i;
-    unsigned int val = 0;
+    volatile uint32_t i, j;
+
     init(FREQ);
 
     // GPIO Setup
@@ -94,20 +94,23 @@ int main(void)
     // Enable global interrupt
     __enable_irq();
     
+
+    adc_set_calibration(0, 16326);
+
     while (1)
     {
-        for (i = 20000; i > 0; i--);        // Delay
-        val = get_adc();
-        uart_write_int(val);
-        uart_write_nl();
-        // Start sampling/conversion
-        ADC14->CTL0 |= ADC14_CTL0_SC;
+        for (j = 10; j > 0; j--){
+            for (i = 20000; i > 0; i--);  // Delay
+            adc_record();
+        }
+        adc_report_avg();
+        adc_report_range();
     }
 }
 
 // ADC14 interrupt service routine
 void ADC14_IRQHandler(void) {
-    store_adc(ADC14->MEM[0]);
+    adc_store_reading(ADC14->MEM[0]);
     if (ADC14->MEM[0] >= 0x2000)      // ADC12MEM0 = A1 > 0.5AVcc?
       P1->OUT |= BIT0;                // P1.0 = 1
     else
