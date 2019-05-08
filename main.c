@@ -7,6 +7,26 @@
 // *
 // */
 
+//******************************************************************************
+//  MSP432P401 Demo - ADC14, Sample A1, AVcc Ref, Set P1.0 if A1 > 0.5*AVcc
+//
+//   A single sample is made on A1 with reference to AVcc. Software sets
+//   ADC14_CTL0_SC to start sample and conversion - ADC14_CTL0_SC automatically
+//   cleared at EOC. Using MODCLK = 25 MHz for sample and conversion timing
+//   Pulse mode with sample timing of 16 cycles. ADC14 interrupts on conversion
+//   completion. If A1 > 0.5*AVcc, P1.0 set, else reset.
+//
+//
+//                MSP432P401R
+//             -----------------
+//         /|\|                 |
+//          | |                 |
+//          --|RST              |
+//            |                 |
+//        >---|P5.4/A1      P1.0|-->LED
+//
+//******************************************************************************
+
 #include <stdint.h>
 #include "msp.h"
 
@@ -23,90 +43,41 @@ volatile uint8_t got_fresh_char;
 
 int main(void)
 {
-    unsigned int value;
+    volatile uint32_t i;
 
     init(FREQ);
 
-    // Set P1.5, P1.6, and P1.7 as SPI pins functionality
-    P1->SEL0 |= BIT5 | BIT6 | BIT7;  // SPI_B0_PINS;     
+    // GPIO Setup
+    P5->SEL1 |= BIT4;                 // Configure P5.4 for ADC
+    P5->SEL0 |= BIT4;
 
-    EUSCI_B0->CTLW0 |= EUSCI_B_CTLW0_SWRST; // Put eUSCI state machine in reset
+    // Sampling time, S&H=16, ADC14 on
+    ADC14->CTL0 = ADC14_CTL0_SHT0_2 | ADC14_CTL0_SHP | ADC14_CTL0_ON;
+    ADC14->CTL1 = ADC14_CTL1_RES_3;     // Use sampling timer, 14-bit conversion
 
-    EUSCI_B0->CTLW0 = EUSCI_B_CTLW0_SWRST  | // keep eUSCI in reset
-                      EUSCI_B_CTLW0_MST    | // Set as SPI master
-                      EUSCI_B_CTLW0_CKPH   | // Clock phase offset
-                      EUSCI_B_CTLW0_SYNC   | // Set as synchronous mode
-                      EUSCI_B_CTLW0_SSEL__SMCLK | // SMCLK
-                      EUSCI_B_CTLW0_MSB;     // MSB first
+    ADC14->MCTL[0] |= ADC14_MCTLN_INCH_1; // A1 ADC input select; Vref=AVCC
+    ADC14->IER0 |= ADC14_IER0_IE0;        // Enable ADC conv complete interrupt
+    ADC14->CTL0 |= ADC14_CTL0_ENC;        // Enable conversions
 
-    EUSCI_B0->BRW = 0x01;               // no div - fBitClock = fBRCLK/(UCBRx)
-
-    EUSCI_B0->CTLW0 &= ~EUSCI_B_CTLW0_SWRST;  // Initialize USCI state machine
-//    EUSCI_B0->IE |= EUSCI_B_IE_RXIE;          // Enable RX interrupt
-
-    // Configure UART pins
-    P1->SEL0 |= UART_PINS;                // set 2-UART pin as secondary function
-
-    // Configure UART
-    EUSCI_A0->CTLW0 |= EUSCI_A_CTLW0_SWRST; // Put eUSCI in reset
-    EUSCI_A0->CTLW0 = EUSCI_A_CTLW0_SWRST | // Remain eUSCI in reset
-                      EUSCI_B_CTLW0_SSEL__SMCLK;      // Configure eUSCI clock source for SMCLK
-
-    // Baud Rate calculation
-    // 3000000/(115200) = 26.041667
-    // Fractional portion = 0.041667
-    // User's Guide Table 21-4: UCBRSx = 0x00
-    // UCBRx = int (26.041667 / 16) = 1
-    // UCBRFx = int (((26.041667/16)-1)*16) = 10
-
-    EUSCI_A0->BRW = 1;                      // Using baud rate calculator
-    EUSCI_A0->MCTLW = (10 << EUSCI_A_MCTLW_BRF_OFS) |
-                      EUSCI_A_MCTLW_OS16;
-    EUSCI_A0->CTLW0 &= ~EUSCI_A_CTLW0_SWRST; // Initialize eUSCI
-    EUSCI_A0->IFG &= ~EUSCI_A_IFG_RXIFG;    // Clear eUSCI RX interrupt flag
-    EUSCI_A0->IE |= EUSCI_A_IE_RXIE;        // Enable USCI_A0 RX interrupt
+    // Enable ADC interrupt in NVIC module
+    NVIC->ISER[0] = 1 << ((ADC14_IRQn) & 31);
     
     // Enable global interrupt
     __enable_irq();
-
-    // Enable eUSCIA0 interrupt in NVIC module
-    NVIC->ISER[0] = 1 << ((EUSCIA0_IRQn) & 31);
-//    NVIC->ISER[0] = 1 << ((EUSCIB0_IRQn) & 31);
-
-    while(1){
-            value = uart_get_int();
-
-            rgb_set(RGB_OFF);
-            led_on();
-
-            dac_set(value);
-            uart_write_nl();
-            uart_write_int(value);
-            uart_write_nl();
-
-            led_off();
-    }
-}
-
-// UART interrupt service routine
-void EUSCIA0_IRQHandler(void)
-{
-    if (EUSCI_A0->IFG & EUSCI_A_IFG_RXIFG)
+    
+    while (1)
     {
-        if (has_new){
-          return;
-        }
-        led_on();
-        // Check if the TX buffer is empty first
-        while(!(EUSCI_A0->IFG & EUSCI_A_IFG_TXIFG)){}
+        for (i = 20000; i > 0; i--);        // Delay
 
-        new_char = EUSCI_A0->RXBUF;
-        has_new = TRUE;
-        // Echo the received character back
-        EUSCI_A0->TXBUF = new_char;
-        delay_ms(10, FREQ);
-        led_off();
+        // Start sampling/conversion
+        ADC14->CTL0 |= ADC14_CTL0_SC;
     }
 }
 
-
+// ADC14 interrupt service routine
+void ADC14_IRQHandler(void) {
+    if (ADC14->MEM[0] >= 0x2000)      // ADC12MEM0 = A1 > 0.5AVcc?
+      P1->OUT |= BIT0;                // P1.0 = 1
+    else
+      P1->OUT &= ~BIT0;               // P1.0 = 0
+}
