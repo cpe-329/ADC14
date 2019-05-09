@@ -95,24 +95,26 @@ int main(void)
     __enable_irq();
     
 
-    adc_set_calibration(0, 16326);
+    adc_set_calibration(0, 16365);
 
     while (1)
     {
-        for (j = 10; j > 0; j--){
+        for (j = 20; j > 0; j--){
             for (i = 20000; i > 0; i--);  // Delay
             adc_record();
         }
+        led_on();
         adc_report_avg();
-        adc_report_range();
+        // adc_report_range();
+        led_off();
     }
 }
 
 // ADC14 interrupt service routine
 void ADC14_IRQHandler(void) {
     adc_store_reading(ADC14->MEM[0]);
-    if (ADC14->MEM[0] >= 0x2000)      // ADC12MEM0 = A1 > 0.5AVcc?
-      P1->OUT |= BIT0;                // P1.0 = 1
-    else
-      P1->OUT &= ~BIT0;               // P1.0 = 0
+    // if (ADC14->MEM[0] >= 0x2000)      // ADC12MEM0 = A1 > 0.5AVcc?
+    //   P1->OUT |= BIT0;                // P1.0 = 1
+    // else
+    //   P1->OUT &= ~BIT0;               // P1.0 = 0
 }

@@ -10,9 +10,6 @@
 #include "adc.h"
 #include "uart.h"
 
-#define AVG_LENGTH (4)
-#define MAX_READING_MV (3300)
-
 static unsigned int adc_value = 0;
 static unsigned int calibration_shift = 0;
 static unsigned int calibration_scale = 5;
@@ -75,13 +72,15 @@ unsigned int adc_map_val(const unsigned int val){
 void adc_set_calibration(unsigned int min, unsigned int max){
     calibration_shift = min;
     calibration_scale = (max - min) / MAX_READING_MV;
+    min_value = 16000;
+    max_value - 0;
 }
 
 void adc_calibrate_on_range(){
     adc_set_calibration(min_value, max_value);
 }
 
-void adc_store_reading(unsigned int val){
+inline void adc_store_reading(unsigned int val){
     adc_value = val;
 }
 
@@ -105,7 +104,9 @@ unsigned int adc_get_avg(){
 void uart_write_volts(unsigned int val_mv){
     uart_write_int(val_mv / 1000);
     uart_write('.');
-    uart_write_int(val_mv % 1000);
+    uart_write_int(val_mv % 1000 / 100);
+    uart_write_int(val_mv % 100 / 10);
+    uart_write_int(val_mv % 10);
     uart_write('V');
     uart_write_nl();
 }
