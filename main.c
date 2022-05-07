@@ -33,7 +33,6 @@
 #include "my_msp.h"
 #include "delay.h"
 #include "led.h"
-#include "spi.h"
 #include "uart.h"
 #include "adc.h"
 
@@ -113,8 +112,4 @@ int main(void)
 // ADC14 interrupt service routine
 void ADC14_IRQHandler(void) {
     adc_store_reading(ADC14->MEM[0]);
-    // if (ADC14->MEM[0] >= 0x2000)      // ADC12MEM0 = A1 > 0.5AVcc?
-    //   P1->OUT |= BIT0;                // P1.0 = 1
-    // else
-    //   P1->OUT &= ~BIT0;               // P1.0 = 0
 }
